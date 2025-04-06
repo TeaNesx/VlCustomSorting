@@ -4,14 +4,21 @@
     "type": "shopware-platform-plugin",
     "version": "1.0.0",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Vu Nhat Long Huynh",
+            "homepage": "https://github.com/teanesx",
+            "email": "huynhvunhatlong@gmail.com"
+        }
+    ],
     "require": {
         "shopware/core": "~6.6.0"
     },
     "extra": {
         "shopware-plugin-class": "VlCustomSorting\\VlCustomSorting",
         "label": {
-            "de-DE": "Skeleton plugin",
-            "en-GB": "Skeleton plugin"
+            "de-DE": "Sortieren",
+            "en-GB": "Custom Sorting"
         }
     },
     "autoload": {
