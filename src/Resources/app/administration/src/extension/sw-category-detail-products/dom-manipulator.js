@@ -2,7 +2,12 @@
 Shopware.Component.override('sw-category-detail-products', {
     data() {
         return {
-            _sortOrderCache: {}
+            _sortOrderCache: {},
+            _observer: null,
+            _intervalId: null,
+            _pendingChanges: {},
+            _inputFocused: false,
+            _activeInputProductId: null
         };
     },
     
@@ -15,7 +20,8 @@ Shopware.Component.override('sw-category-detail-products', {
         // Add the input fields after a short delay to ensure the grid is rendered
         setTimeout(() => {
             this.loadSortOrderValues();
-            this.addSortOrderInputFields();
+            this.setupContinuousMonitoring();
+            this.setupSaveButton();
         }, 1000);
     },
 
@@ -29,6 +35,16 @@ Shopware.Component.override('sw-category-detail-products', {
         setTimeout(() => {
             this.addSortOrderInputFields();
         }, 500);
+    },
+    
+    beforeDestroy() {
+        // Clean up observers and intervals when component is destroyed
+        this.cleanupMonitoring();
+        
+        // Call original beforeDestroy if it exists
+        if (this.$options.extends && this.$options.extends.methods && this.$options.extends.methods.beforeDestroy) {
+            this.$options.extends.methods.beforeDestroy.call(this);
+        }
     },
     
     // Add computed properties to access the grid and products
@@ -79,6 +95,210 @@ Shopware.Component.override('sw-category-detail-products', {
     },
 
     methods: {
+        setupSaveButton() {
+            // Warte kurz, um sicherzustellen, dass die UI vollständig geladen ist
+            setTimeout(() => {
+                // Finde den Speichern-Button im Footer der Kategorie-Detailansicht
+                const saveButton = document.querySelector('.sw-category-detail__save-action');
+                if (!saveButton) {
+                    // Wenn der Button nicht gefunden wurde, versuche es später erneut
+                    setTimeout(() => this.setupSaveButton(), 500);
+                    return;
+                }
+                
+                // Entferne vorhandene Event-Listener, um Duplikate zu vermeiden
+                saveButton.removeEventListener('click', this.handleSaveButtonClick);
+                
+                // Füge einen neuen Event-Listener hinzu
+                saveButton.addEventListener('click', this.handleSaveButtonClick);
+                console.log('Save button event listener added');
+            }, 500);
+        },
+        
+        handleSaveButtonClick() {
+            // Speichere alle ausstehenden Änderungen
+            if (Object.keys(this._pendingChanges).length > 0) {
+                console.log('Saving pending changes:', this._pendingChanges);
+                
+                // Speichere jede Änderung einzeln
+                const savePromises = [];
+                Object.entries(this._pendingChanges).forEach(([productId, value]) => {
+                    savePromises.push(this.saveSortOrder(productId, value));
+                });
+                
+                // Warte auf alle Speichervorgänge
+                Promise.all(savePromises)
+                    .then(() => {
+                        // Zeige Erfolgsmeldung
+                        Shopware.State.dispatch('notification/createNotification', {
+                            title: 'Erfolg',
+                            message: 'Sortierung wurde gespeichert',
+                            variant: 'success'
+                        });
+                        
+                        // Leere die ausstehenden Änderungen
+                        this._pendingChanges = {};
+                    })
+                    .catch((error) => {
+                        console.error('Error saving sort orders:', error);
+                        
+                        // Zeige Fehlermeldung
+                        Shopware.State.dispatch('notification/createNotification', {
+                            title: 'Fehler',
+                            message: 'Fehler beim Speichern der Sortierung',
+                            variant: 'error'
+                        });
+                    });
+            }
+        },
+        setupContinuousMonitoring() {
+            // Bereinige vorhandene Observer und Intervalle
+            this.cleanupMonitoring();
+            
+            // 1. Setze einen Intervall, der regelmäßig prüft, ob die Input-Felder vorhanden sind
+            this._intervalId = setInterval(() => {
+                // Nur aktualisieren, wenn kein Eingabefeld fokussiert ist
+                if (!this._inputFocused) {
+                    this.addSortOrderInputFields();
+                }
+            }, 1000); // Prüfe jede Sekunde
+            
+            // 2. Verwende MutationObserver, um auf DOM-Änderungen zu reagieren
+            const setupObserver = () => {
+                // Finde das Hauptelement, das die Tabelle enthält
+                const container = document.querySelector('.sw-category-detail__products');
+                if (!container) {
+                    // Wenn das Container-Element nicht gefunden wurde, versuche es später erneut
+                    setTimeout(setupObserver, 500);
+                    return;
+                }
+                
+                // Erstelle einen neuen MutationObserver
+                this._observer = new MutationObserver((mutations) => {
+                    // Prüfe, ob relevante Änderungen vorliegen
+                    const relevantMutation = mutations.some(mutation => {
+                        // Änderungen an Kindelementen
+                        if (mutation.type === 'childList') {
+                            return true;
+                        }
+                        
+                        // Änderungen an Attributen
+                        if (mutation.type === 'attributes' && 
+                            (mutation.target.classList.contains('sw-data-grid') ||
+                             mutation.target.classList.contains('sw-data-grid__body') ||
+                             mutation.target.classList.contains('sw-data-grid__row'))) {
+                            return true;
+                        }
+                        
+                        return false;
+                    });
+                    
+                    if (relevantMutation) {
+                        // Warte kurz, bis die Änderungen abgeschlossen sind
+                        setTimeout(() => {
+                            // Nur aktualisieren, wenn kein Eingabefeld fokussiert ist
+                            if (!this._inputFocused) {
+                                this.loadSortOrderValues();
+                                this.addSortOrderInputFields();
+                            }
+                        }, 200);
+                    }
+                });
+                
+                // Starte die Beobachtung mit allen relevanten Optionen
+                this._observer.observe(container, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    characterData: false
+                });
+                
+                // Füge Event-Listener für AJAX-Aufrufe hinzu
+                this.setupAjaxInterceptor();
+                
+                // Füge Event-Listener für Pagination hinzu
+                this.setupPaginationEvents();
+            };
+            
+            // Starte den Observer-Setup
+            setupObserver();
+            
+            // Initial die Input-Felder hinzufügen
+            this.addSortOrderInputFields();
+        },
+        
+        setupPaginationEvents() {
+            // Finde die Grid-Komponente
+            const gridComponent = this.gridComponent;
+            if (!gridComponent || !gridComponent.$on) {
+                return;
+            }
+            
+            // Entferne vorhandene Listener, um Duplikate zu vermeiden
+            gridComponent.$off('page-change');
+            gridComponent.$off('paginate');
+            gridComponent.$off('sort-change');
+            gridComponent.$off('selection-change');
+            
+            // Füge neue Listener hinzu
+            const events = ['page-change', 'paginate', 'sort-change', 'selection-change'];
+            events.forEach(event => {
+                gridComponent.$on(event, () => {
+                    setTimeout(() => {
+                        // Nur aktualisieren, wenn kein Eingabefeld fokussiert ist
+                        if (!this._inputFocused) {
+                            this.loadSortOrderValues();
+                            this.addSortOrderInputFields();
+                        }
+                    }, 300);
+                });
+            });
+        },
+        
+        setupAjaxInterceptor() {
+            // Globaler AJAX-Interceptor für XMLHttpRequest
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            const originalXHRSend = XMLHttpRequest.prototype.send;
+            const self = this;
+            
+            XMLHttpRequest.prototype.open = function() {
+                this.addEventListener('load', function() {
+                    // Prüfe, ob die Anfrage abgeschlossen ist und erfolgreich war
+                    if (this.readyState === 4 && this.status >= 200 && this.status < 300) {
+                        // Warte kurz, bis die UI aktualisiert wurde
+                        setTimeout(() => {
+                            // Nur aktualisieren, wenn kein Eingabefeld fokussiert ist
+                            if (!self._inputFocused) {
+                                self.loadSortOrderValues();
+                                self.addSortOrderInputFields();
+                            }
+                        }, 300);
+                    }
+                });
+                return originalXHROpen.apply(this, arguments);
+            };
+            
+            XMLHttpRequest.prototype.send = function() {
+                return originalXHRSend.apply(this, arguments);
+            };
+        },
+        
+        cleanupMonitoring() {
+            // Bereinige den Intervall
+            if (this._intervalId) {
+                clearInterval(this._intervalId);
+                this._intervalId = null;
+            }
+            
+            // Bereinige den Observer
+            if (this._observer) {
+                this._observer.disconnect();
+                this._observer = null;
+            }
+            
+            // Bereinige AJAX-Interceptor (nicht möglich, da global)
+        },
+        
         loadSortOrderValues() {
             // Get the current category ID
             const categoryId = this.getCurrentCategoryId();
@@ -350,79 +570,114 @@ Shopware.Component.override('sw-category-detail-products', {
         },
         
         addSortOrderInputFields() {
-            // Find all cells with the sortOrder class
-            const sortOrderCells = document.querySelectorAll('.sw-data-grid__cell--sortOrder .sw-data-grid__cell-content');
-            
-            if (!sortOrderCells.length) {
-                return;
-            }
-
-            // Get the current category ID
-            const categoryId = this.getCurrentCategoryId();
-            if (!categoryId) {
-                return;
-            }
-            
-            // Create a custom field key for this category's sort order
-            const sortOrderKey = `category_sort_order_${categoryId}`;
-            
-            // Process each cell
-            sortOrderCells.forEach((cell) => {
-                // Skip if already processed
-                if (cell.querySelector('input')) {
-                    // Update the value if the input already exists
-                    const input = cell.querySelector('input');
-                    const row = cell.closest('.sw-data-grid__row');
-                    if (row) {
-                        const productId = this.getProductIdFromRow(row);
-                        if (productId) {
-                            const currentValue = this.getProductSortOrder(productId);
-                            if (currentValue !== null && input.value !== currentValue.toString()) {
-                                input.value = currentValue;
+            // Warte kurz, um sicherzustellen, dass die Tabelle vollständig gerendert ist
+            setTimeout(() => {
+                // Find all cells with the sortOrder class
+                const sortOrderCells = document.querySelectorAll('.sw-data-grid__cell--sortOrder .sw-data-grid__cell-content');
+                
+                if (!sortOrderCells.length) {
+                    // Versuche es erneut, wenn keine Zellen gefunden wurden
+                    setTimeout(() => this.addSortOrderInputFields(), 500);
+                    return;
+                }
+    
+                // Get the current category ID
+                const categoryId = this.getCurrentCategoryId();
+                if (!categoryId) {
+                    return;
+                }
+                
+                // Create a custom field key for this category's sort order
+                const sortOrderKey = `category_sort_order_${categoryId}`;
+                
+                // Process each cell
+                sortOrderCells.forEach((cell) => {
+                    // Skip if already processed
+                    if (cell.querySelector('input')) {
+                        // Update the value if the input already exists
+                        const input = cell.querySelector('input');
+                        const row = cell.closest('.sw-data-grid__row');
+                        if (row) {
+                            const productId = this.getProductIdFromRow(row);
+                            if (productId) {
+                                // Prüfe, ob es eine ausstehende Änderung gibt oder ob das Eingabefeld gerade fokussiert ist
+                                if (this._pendingChanges[productId] !== undefined) {
+                                    // Wenn es eine ausstehende Änderung gibt, verwende diesen Wert
+                                    if (input.value !== this._pendingChanges[productId].toString()) {
+                                        input.value = this._pendingChanges[productId];
+                                    }
+                                } else if (this._activeInputProductId !== productId) {
+                                    // Nur aktualisieren, wenn dieses Eingabefeld nicht gerade fokussiert ist
+                                    const currentValue = this.getProductSortOrder(productId);
+                                    if (currentValue !== null && input.value !== currentValue.toString()) {
+                                        input.value = currentValue;
+                                    }
+                                }
                             }
                         }
+                        return;
                     }
-                    return;
-                }
-
-                // Get the row element to access the item data
-                const row = cell.closest('.sw-data-grid__row');
-                if (!row) {
-                    return;
-                }
-                
-                // Find the product ID from the row
-                const productId = this.getProductIdFromRow(row);
-                if (!productId) {
-                    return;
-                }
-                
-                // Get the current sort order value
-                const currentValue = this.getProductSortOrder(productId);
-                
-                // Clear the cell content
-                cell.innerHTML = '';
-
-                // Create an input field
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'sw-field__input';
-                input.value = currentValue !== null ? currentValue : '';
-                input.style.width = '100%';
-                input.style.height = '32px';
-                input.style.padding = '0 10px';
-                input.style.border = '1px solid #d1d9e0';
-                input.style.borderRadius = '4px';
-                input.placeholder = '0';
-                
-                // Add event listener for changes
-                input.addEventListener('change', (event) => {
-                    this.saveSortOrder(productId, event.target.value);
+    
+                    // Get the row element to access the item data
+                    const row = cell.closest('.sw-data-grid__row');
+                    if (!row) {
+                        return;
+                    }
+                    
+                    // Find the product ID from the row
+                    const productId = this.getProductIdFromRow(row);
+                    if (!productId) {
+                        return;
+                    }
+                    
+                    // Get the current sort order value
+                    const currentValue = this.getProductSortOrder(productId);
+                    
+                    // Clear the cell content
+                    cell.innerHTML = '';
+    
+                    // Create an input field
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'sw-field__input';
+                    input.value = currentValue !== null ? currentValue : '';
+                    input.style.width = '100%';
+                    input.style.height = '32px';
+                    input.style.padding = '0 10px';
+                    input.style.border = '1px solid #d1d9e0';
+                    input.style.borderRadius = '4px';
+                    input.placeholder = '0';
+                    
+                    // Event-Listener für Focus und Blur, um zu verfolgen, welches Eingabefeld aktiv ist
+                    input.addEventListener('focus', () => {
+                        this._inputFocused = true;
+                        this._activeInputProductId = productId;
+                        console.log(`Input focused for product ${productId}`);
+                    });
+                    
+                    input.addEventListener('blur', () => {
+                        this._inputFocused = false;
+                        setTimeout(() => {
+                            this._activeInputProductId = null;
+                        }, 300);
+                        console.log(`Input blurred for product ${productId}`);
+                    });
+                    
+                    // Event-Listener für Änderungen - nur den Wert speichern, noch nicht speichern
+                    input.addEventListener('change', (event) => {
+                        this._pendingChanges[productId] = event.target.value;
+                        console.log(`Stored pending change for product ${productId}: ${event.target.value}`);
+                    });
+                    
+                    // Event-Listener für Eingaben - aktualisiere den Wert bei jeder Eingabe
+                    input.addEventListener('input', (event) => {
+                        this._pendingChanges[productId] = event.target.value;
+                    });
+                    
+                    // Füge das Eingabefeld zur Zelle hinzu
+                    cell.appendChild(input);
                 });
-                
-                // Add the input to the cell
-                cell.appendChild(input);
-            });
+            }, 100);
         },
         
         getProductIdFromRow(row) {
@@ -541,7 +796,7 @@ Shopware.Component.override('sw-category-detail-products', {
             const categoryId = this.getCurrentCategoryId();
             if (!categoryId) {
                 console.error('Cannot save sort order: Category ID not found');
-                return;
+                return Promise.reject(new Error('Category ID not found'));
             }
             
             // Parse the value to ensure it's a number
@@ -553,8 +808,11 @@ Shopware.Component.override('sw-category-detail-products', {
             // Log the update attempt
             console.log(`Updating product ${productId} with sort order for category ${categoryId}:`, parsedValue);
             
-            // First, get the product to update
-            productRepository.get(productId, Shopware.Context.api).then((product) => {
+            // Aktualisiere die lokale Anzeige sofort, damit der Benutzer Feedback erhält
+            this.updateProductInGrid(productId, parsedValue);
+            
+            // Rückgabe eines Promise für die Speicheroperation
+            return productRepository.get(productId, Shopware.Context.api).then((product) => {
                 // Initialize custom fields if they don't exist
                 if (!product.customFields) {
                     product.customFields = {};
@@ -578,20 +836,11 @@ Shopware.Component.override('sw-category-detail-products', {
             .then(() => {
                 console.log('Sort order updated successfully');
                 
-                // Show success notification
-                Shopware.State.dispatch('notification/createNotification', {
-                    title: 'Erfolg',
-                    message: 'Sortierung wurde gespeichert',
-                    variant: 'success'
-                });
+                // Update the cache
+                this._sortOrderCache[productId] = parsedValue;
                 
-                // Update the product in the grid
-                this.updateProductInGrid(productId, parsedValue);
-                
-                // If we have a grid component with a getList method, refresh the grid
-                if (this.gridComponent && typeof this.gridComponent.getList === 'function') {
-                    this.gridComponent.getList();
-                }
+                // Return success
+                return true;
             })
             .catch((error) => {
                 console.error('Error saving sort order:', error);
