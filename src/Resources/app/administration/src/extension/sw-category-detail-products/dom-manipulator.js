@@ -37,17 +37,22 @@ Shopware.Component.override('sw-category-detail-products', {
             // Get the original columns
             const columns = this.$super('productColumns');
 
-            // Add our new sorting column
-            columns.push({
-                property: 'sortOrder',
-                dataIndex: 'sortOrder',
-                label: this.$tc('vl-custom-sorting.columns.sortOrder'),
-                inlineEdit: 'string',
-                allowResize: true,
-                align: 'right',
-                width: '125px',
-                visible: true
-            });
+            // Check if the sortOrder column already exists
+            const sortOrderColumnExists = columns.some(column => column.property === 'sortOrder');
+            
+            // Add our new sorting column only if it doesn't already exist
+            if (!sortOrderColumnExists) {
+                columns.push({
+                    property: 'sortOrder',
+                    dataIndex: 'sortOrder',
+                    label: this.$tc('vl-custom-sorting.columns.sortOrder'),
+                    inlineEdit: 'string',
+                    allowResize: true,
+                    align: 'right',
+                    width: '125px',
+                    visible: true
+                });
+            }
 
             return columns;
         },
