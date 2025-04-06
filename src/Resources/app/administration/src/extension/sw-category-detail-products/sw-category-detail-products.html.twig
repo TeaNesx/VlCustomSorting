@@ -2,22 +2,17 @@
     {% parent %}
 {% endblock %}
 
-{# Override the column templates to add our new sorting column #}
-{% block sw_category_detail_product_assignment_column_manufacturer %}
+{% block sw_many_to_many_assignment_card_grid_columns %}
     {% parent %}
-{% endblock %}
 
-{# Add a new block for our sorting column #}
-{% block sw_category_detail_product_assignment_column_sort_order %}
-    <template #sortOrder="{ item }">
-        <sw-number-field
-            v-if="item"
-            v-model="item.sortOrder"
-            :min="0"
-            :max="999"
-            :step="1"
-            :disabled="!acl.can('category.editor')"
+    <template slot="column-sortOrder" slot-scope="{ item }">
+        <input 
+            type="text" 
+            class="sw-field__input" 
+            :value="item.sortOrder"
+            @input="item.sortOrder = $event.target.value"
             @change="onSortOrderChange(item)"
-        ></sw-number-field>
+            style="width: 100%; height: 32px; padding: 0 10px; border: 1px solid #d1d9e0; border-radius: 4px;"
+        />
     </template>
 {% endblock %}

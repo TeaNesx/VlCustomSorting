@@ -8,5 +8,10 @@
         <service id="VlCustomSorting\Core\Content\Product\ProductExtension">
             <tag name="shopware.entity.extension"/>
         </service>
+        
+        <service id="VlCustomSorting\Controller\ProductCustomFieldsController" public="true">
+            <argument type="service" id="product.repository"/>
+            <tag name="controller.service_arguments"/>
+        </service>
     </services>
 </container>

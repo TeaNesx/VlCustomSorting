@@ -22,7 +22,7 @@ class Migration1712436000AddSortOrderField extends MigrationStep
         if (!$columnExists) {
             $connection->executeStatement('
                 ALTER TABLE `product`
-                ADD COLUMN `sort_order` INT DEFAULT 0 AFTER `available`;
+                ADD COLUMN `sort_order` INT DEFAULT 0;
             ');
         }
     }
