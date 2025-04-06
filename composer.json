@@ -1,0 +1,27 @@
+{
+    "name": "vl-custom-sorting/vl-custom-sorting",
+    "description": "vl-custom-sorting/vl-custom-sorting",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "require": {
+        "shopware/core": "~6.6.0"
+    },
+    "extra": {
+        "shopware-plugin-class": "VlCustomSorting\\VlCustomSorting",
+        "label": {
+            "de-DE": "Skeleton plugin",
+            "en-GB": "Skeleton plugin"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "VlCustomSorting\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "VlCustomSorting\\Tests\\": "tests/"
+        }
+    }
+}

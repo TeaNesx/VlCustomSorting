@@ -1,0 +1,23 @@
+{% block sw_category_detail_products %}
+    {% parent %}
+{% endblock %}
+
+{# Override the column templates to add our new sorting column #}
+{% block sw_category_detail_product_assignment_column_manufacturer %}
+    {% parent %}
+{% endblock %}
+
+{# Add a new block for our sorting column #}
+{% block sw_category_detail_product_assignment_column_sort_order %}
+    <template #sortOrder="{ item }">
+        <sw-number-field
+            v-if="item"
+            v-model="item.sortOrder"
+            :min="0"
+            :max="999"
+            :step="1"
+            :disabled="!acl.can('category.editor')"
+            @change="onSortOrderChange(item)"
+        ></sw-number-field>
+    </template>
+{% endblock %}
