@@ -13,5 +13,21 @@
             <argument type="service" id="product.repository"/>
             <tag name="controller.service_arguments"/>
         </service>
+        
+        <!-- Deaktivieren des Subscribers und des Decorators -->
+        <!-- 
+        <service id="VlCustomSorting\Storefront\Subscriber\ProductListingSubscriber">
+            <tag name="kernel.event_subscriber"/>
+        </service>
+        
+        <service id="VlCustomSorting\Core\Content\Product\SalesChannel\Listing\ProductListingRouteDecorator" decorates="Shopware\Core\Content\Product\SalesChannel\Listing\ProductListingRoute" decoration-priority="1000" public="true">
+            <argument type="service" id="VlCustomSorting\Core\Content\Product\SalesChannel\Listing\ProductListingRouteDecorator.inner"/>
+        </service>
+        -->
+        
+        <!-- Registrierung des CustomSortingService -->
+        <service id="VlCustomSorting\Service\CustomSortingService">
+            <tag name="kernel.event_subscriber"/>
+        </service>
     </services>
 </container>
