@@ -638,7 +638,7 @@ Shopware.Component.override('sw-category-detail-products', {
     
                     // Create an input field
                     const input = document.createElement('input');
-                    input.type = 'text';
+                    input.type = 'number'; // Changed to number type for better handling on Windows
                     input.className = 'sw-field__input';
                     input.value = currentValue !== null ? currentValue : '';
                     input.style.width = '100%';
@@ -647,6 +647,8 @@ Shopware.Component.override('sw-category-detail-products', {
                     input.style.border = '1px solid #d1d9e0';
                     input.style.borderRadius = '4px';
                     input.placeholder = '0';
+                    input.min = '0'; // Add min attribute to prevent negative values
+                    input.step = '1'; // Add step attribute to ensure whole numbers
                     
                     // Event-Listener für Focus und Blur, um zu verfolgen, welches Eingabefeld aktiv ist
                     input.addEventListener('focus', () => {
@@ -665,13 +667,17 @@ Shopware.Component.override('sw-category-detail-products', {
                     
                     // Event-Listener für Änderungen - nur den Wert speichern, noch nicht speichern
                     input.addEventListener('change', (event) => {
-                        this._pendingChanges[productId] = event.target.value;
-                        console.log(`Stored pending change for product ${productId}: ${event.target.value}`);
+                        // Convert to number and back to string to ensure consistent formatting
+                        const numValue = event.target.value === '' ? '' : parseInt(event.target.value, 10);
+                        this._pendingChanges[productId] = numValue.toString();
+                        console.log(`Stored pending change for product ${productId}: ${numValue}`);
                     });
                     
                     // Event-Listener für Eingaben - aktualisiere den Wert bei jeder Eingabe
                     input.addEventListener('input', (event) => {
-                        this._pendingChanges[productId] = event.target.value;
+                        // Convert to number and back to string to ensure consistent formatting
+                        const numValue = event.target.value === '' ? '' : parseInt(event.target.value, 10);
+                        this._pendingChanges[productId] = numValue.toString();
                     });
                     
                     // Füge das Eingabefeld zur Zelle hinzu
